@@ -99,6 +99,11 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 1981811741266840370}
   m_SourcePrefab: {fileID: 100100000, guid: cd1eb22d5021a7a48b2912534018c79e, type: 3}
+--- !u!4 &1141318910372986651 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -1253996098385199550, guid: cd1eb22d5021a7a48b2912534018c79e, type: 3}
+  m_PrefabInstance: {fileID: 7011593010864554329}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &7894607150087715848 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: cd1eb22d5021a7a48b2912534018c79e, type: 3}
@@ -124,5 +129,5 @@ MonoBehaviour:
   adsSpeed: 12
   recoilForce: 2
   recoilReturnSpeed: 5
-  muzzle: {fileID: 0}
+  muzzle: {fileID: 1141318910372986651}
   bulletPrefab: {fileID: 0}
