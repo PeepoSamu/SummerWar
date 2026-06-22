@@ -130,4 +130,7 @@ MonoBehaviour:
   recoilForce: 2
   recoilReturnSpeed: 5
   muzzle: {fileID: 1141318910372986651}
-  bulletPrefab: {fileID: 0}
+  bulletPrefab: {fileID: 2183421460078680199, guid: 8065cb6ed84ec2943a65072d886cf2af, type: 3}
+  currentAmmo: 0
+  reserveAmmo: 0
+  maxReserveAmmo: 0

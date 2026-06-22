@@ -1,8 +1,8 @@
 using UnityEngine;
+using System.Collections; // Necesario para usar IEnumerator (la recarga con tiempo)
 
 public abstract class BaseWeapon : MonoBehaviour
 {
-    // Mantenemos oculta la data del ScriptableObject, pero accesible para herencia
     [HideInInspector] public WeaponData data;
 
     [Header("Precision & ADS Settings")]
@@ -18,13 +18,19 @@ public abstract class BaseWeapon : MonoBehaviour
 
     [Header("References")]
     public Transform muzzle;
-    public GameObject bulletPrefab;
+    public GameObject bulletPrefab; // ¡Aquí asignarás tu bolita de pintura!
 
-    // Variables de estado dinámicas (Viven en la instancia, no en el ScriptableObject)
+    // Variables de estado dinámicas
     protected float damage;
     protected float fireRate;
     protected int magazineSize;
-    protected int currentAmmo;
+    
+    // --- NUEVAS VARIABLES DE MUNICIÓN ---
+    [Header("Ammo Status (Sólo lectura)")]
+    [SerializeField] protected int currentAmmo;
+    [SerializeField] protected int reserveAmmo;
+    [SerializeField] protected int maxReserveAmmo;
+    protected bool isReloading = false;
 
     protected float nextShoot;
     protected bool isAiming;
@@ -32,7 +38,6 @@ public abstract class BaseWeapon : MonoBehaviour
 
     protected virtual void Start()
     {
-        // Al arrancar, si tenemos un ScriptableObject asignado por el manager, jalamos sus datos base
         if (data != null)
         {
             damage = data.Damage;
@@ -40,16 +45,16 @@ public abstract class BaseWeapon : MonoBehaviour
             magazineSize = data.MagazineSize;
         }
 
+        // Configuración inicial de la munición (Cargador x 3 en reserva)
         currentAmmo = magazineSize;
+        maxReserveAmmo = magazineSize * 3; 
+        reserveAmmo = maxReserveAmmo; 
+
         originalRotation = transform.localRotation;
     }
 
-    // EN BASEWEASON.CS
-
-    // El veterano usa SetADS porque define perfectamente la mecánica de un FPS
     public void SetADS(bool isAiming)
     {
-        // Si usas el código optimizado, esto activa la transición de la mira (Lerp)
         this.isAiming = isAiming; 
     }   
 
@@ -59,14 +64,12 @@ public abstract class BaseWeapon : MonoBehaviour
         HandleRecoilRecovery();
     }
 
-    // Gestiona el movimiento físico de la mira en pantalla
     private void HandleADSVisual()
     {
         Vector3 targetPosition = isAiming ? adsPosition : hipPosition;
         transform.localPosition = Vector3.Lerp(transform.localPosition, targetPosition, Time.deltaTime * adsSpeed);
     }
 
-    // Hace que el arma vuelva a su posición original gradualmente tras disparar
     private void HandleRecoilRecovery()
     {
         transform.localRotation = Quaternion.Slerp(transform.localRotation, originalRotation, Time.deltaTime * recoilReturnSpeed);
@@ -74,48 +77,73 @@ public abstract class BaseWeapon : MonoBehaviour
 
     public virtual void Shoot()
     {
-        if (Time.time < nextShoot || currentAmmo <= 0) return;
+        // CORRECCIÓN: Si está recargando o no tiene balas, bloqueamos el disparo
+        if (isReloading || Time.time < nextShoot || currentAmmo <= 0) return;
 
         nextShoot = Time.time + fireRate;
         currentAmmo--;
 
-        // 1. Cálculo de dispersión profesional (Multiplicando por los ejes locales del cañón)
         float currentSpread = isAiming ? adsSpread : hipSpread;
         Vector3 spreadOffset = (muzzle.right * Random.Range(-currentSpread, currentSpread)) + 
                                (muzzle.up * Random.Range(-currentSpread, currentSpread));
         
         Vector3 finalDirection = (muzzle.forward + spreadOffset).normalized;
 
-        // 2. Instanciar proyectil
         if (bulletPrefab != null && muzzle != null)
         {
             GameObject bullet = Instantiate(bulletPrefab, muzzle.position, Quaternion.LookRotation(finalDirection));
             
-            // Sincronización con tu script 'Projectile' que ya tenías creado
             Projectile projectileScript = bullet.GetComponent<Projectile>();
             if (projectileScript != null)
             {
-                // Pasamos: Daño, Velocidad, Gravedad, Tiempo de vida (ej: 3 segundos)
-                projectileScript.Initialize(damage, 120f, 1f, 3f);
+                // MODIFICACIÓN: Bajamos la velocidad de 120f a 35f para que parezca una bola de pintura real
+                // Al bajar la velocidad, verás de forma espectacular cómo la bola cae por la gravedad física
+                projectileScript.Initialize(damage, 35f, 1f, 4f);
             }
         }
 
-        // 3. Aplicar retroceso visual al arma
         ApplyVisualRecoil();
     }
 
     private void ApplyVisualRecoil()
     {
-        // Rompemos levemente la rotación hacia arriba y un lado aleatorio
         float pitch = -recoilForce;
         float yaw = Random.Range(-recoilForce * 0.3f, recoilForce * 0.3f);
-
         transform.localRotation *= Quaternion.Euler(pitch, yaw, 0);
     }
 
+    // --- NUEVA LÓGICA DE RECARGA REAL ---
     public virtual void StartReload()
     {
-        Debug.Log($"Recargando {gameObject.name}...");
-        currentAmmo = magazineSize; // Lógica básica por ahora
+        // Si ya está recargando, si el cargador está lleno, o si no hay reservas, no hace nada
+        if (isReloading || currentAmmo == magazineSize || reserveAmmo <= 0) return;
+
+        StartCoroutine(ReloadCoroutine());
+    }
+
+    private IEnumerator ReloadCoroutine()
+    {
+        isReloading = true;
+        Debug.Log($"Recargando {gameObject.name}... Esperando {data.ReloadTime} segundos.");
+
+        // Espera el tiempo de recarga configurado en tu WeaponData ScriptableObject
+        yield return new WaitForSeconds(data != null ? data.ReloadTime : 2.0f);
+
+        int ammoNeeded = magazineSize - currentAmmo;
+        int ammoToLoad = Mathf.Min(ammoNeeded, reserveAmmo);
+
+        currentAmmo += ammoToLoad;
+        reserveAmmo -= ammoToLoad;
+
+        isReloading = false;
+        Debug.Log($"Recarga completa. Balas: {currentAmmo} | Reserva restante: {reserveAmmo}");
+    }
+
+    // --- MÉTODO PARA RECOGER MUNICIÓN DEL SUELO ---
+    public void AddAmmo(int amount)
+    {
+        // Añade balas sin pasarse del límite de cargador x3
+        reserveAmmo = Mathf.Min(reserveAmmo + amount, maxReserveAmmo);
+        Debug.Log($"¡Munición añadida! Reserva actual: {reserveAmmo}/{maxReserveAmmo}");
     }
 }
